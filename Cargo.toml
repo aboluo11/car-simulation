@@ -1,0 +1,9 @@
+[package]
+name = "car-simulation"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+raqote = "0.7.8"
+minifb = "0.19.3"
+euclid = "0.20"
