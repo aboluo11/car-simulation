@@ -1,7 +1,5 @@
 use std::ops;
 
-use crate::Point;
-
 #[derive(Clone, Copy)]
 pub struct Matrix<const R: usize, const C: usize> {
     pub inner: [[f32; C]; R]
@@ -26,7 +24,7 @@ impl Vector2D {
     }
 
     pub fn y(&self) -> f32 {
-        self.inner[0][1]
+        self.inner[1][0]
     }
 }
 
@@ -64,6 +62,27 @@ impl<const R: usize, const C: usize> Matrix<R, C> {
     }
 }
 
+impl Matrix<2, 2> {
+    pub fn inverse(&self) -> Option<Matrix<2, 2>> {
+        let tmp = self.inner[0][0]*self.inner[1][1] - self.inner[0][1]*self.inner[1][0];
+        if tmp == 0. {
+            None
+        } else {
+            Some((1./tmp) * Matrix {inner: {[
+                [self.inner[1][1], -self.inner[0][1]],
+                [-self.inner[1][0], self.inner[0][0]],
+            ]}})
+        }
+    }
+
+    pub fn eye() -> Matrix<2, 2> {
+        Matrix::new([
+            [1., 0.],
+            [0., 1.],
+        ])
+    }
+}
+
 impl<const R: usize, const C: usize> ops::Add<Matrix<R, C>> for Matrix<R, C> {
     type Output = Matrix<R, C>;
     fn add(self, rhs: Matrix<R, C>) -> Matrix<R, C> {
@@ -80,7 +99,7 @@ impl<const R: usize, const C: usize> ops::Add<Matrix<R, C>> for Matrix<R, C> {
 impl<const R: usize, const C: usize> ops::Sub<Matrix<R, C>> for Matrix<R, C> {
     type Output = Matrix<R, C>;
     fn sub(self, rhs: Matrix<R, C>) -> Matrix<R, C> {
-        self - rhs
+        self + -1. * rhs
     }
 }
 
