@@ -237,11 +237,11 @@ impl Car {
     }
 
     fn L(&self) -> f32 {
-        self.lt.origin.y - self.lb.origin.y
+        f32::abs(self.lt.origin.y - self.lb.origin.y)
     }
 
     fn T(&self) -> f32 {
-        self.rb.origin.x - self.lb.origin.x
+        f32::abs(self.rb.origin.x - self.lb.origin.x)
     }
 
     fn back_origin(&self) -> Point {
