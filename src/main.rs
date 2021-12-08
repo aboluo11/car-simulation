@@ -22,7 +22,7 @@ fn new_rotation_matrix(angle: f32) -> Matrix<2, 2> {
     ])
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 struct Point {
     x: f32,
     y: f32,
@@ -54,7 +54,7 @@ fn point2(x: f32, y: f32) -> Point {
 
 fn distance_of(x: Point, y: Point) -> f32 {
     let a = x.to_vector() - y.to_vector();
-    (a * a).sum()
+    f32::sqrt((a * a).sum())
 }
 
 #[derive(Clone, Copy)]
@@ -90,22 +90,22 @@ impl Rect {
     }
 
     fn lt(&self) -> Point {
-        point2(self.origin.x - self.width/2., self.origin.y - self.height/2.)
-            .rotate(Rotation { rotation_matrix: self.rotation_matrix, origin: self.origin })
-    }
-
-    fn rt(&self) -> Point {
-        point2(self.origin.x + self.width/2., self.origin.y - self.height/2.)
-            .rotate(Rotation { rotation_matrix: self.rotation_matrix, origin: self.origin })
-    }
-
-    fn lb(&self) -> Point {
         point2(self.origin.x - self.width/2., self.origin.y + self.height/2.)
             .rotate(Rotation { rotation_matrix: self.rotation_matrix, origin: self.origin })
     }
 
-    fn rb(&self) -> Point {
+    fn rt(&self) -> Point {
         point2(self.origin.x + self.width/2., self.origin.y + self.height/2.)
+            .rotate(Rotation { rotation_matrix: self.rotation_matrix, origin: self.origin })
+    }
+
+    fn lb(&self) -> Point {
+        point2(self.origin.x - self.width/2., self.origin.y - self.height/2.)
+            .rotate(Rotation { rotation_matrix: self.rotation_matrix, origin: self.origin })
+    }
+
+    fn rb(&self) -> Point {
+        point2(self.origin.x + self.width/2., self.origin.y - self.height/2.)
             .rotate(Rotation { rotation_matrix: self.rotation_matrix, origin: self.origin })
     }
 
@@ -219,7 +219,8 @@ impl Car {
     fn forward(&mut self, distance: f32) {
         let o = self.angle2origin(self.steer_angle);
         if let Some(o) = o {
-            let angle = distance/distance_of(self.top_origin(), o);
+            let angle = distance/distance_of(self.top_origin(), o) 
+                * (if self.steer_angle > 0 {1.} else {-1.});
             let rotation = Rotation::new(angle, o);
             self.lt.rotate(rotation);
             self.rt.rotate(rotation);
@@ -240,7 +241,7 @@ impl Car {
     }
 
     fn T(&self) -> f32 {
-        self.lb.origin.x - self.rb.origin.x
+        self.rb.origin.x - self.lb.origin.x
     }
 
     fn back_origin(&self) -> Point {
@@ -270,7 +271,21 @@ impl Car {
         if angle == 0 {
             None
         } else {
-            Some(300./(angle as f32))
+            Some(800./(angle as f32))
+        }
+    }
+
+    fn left_steer(&mut self) {
+        if self.steer_angle < 5 {
+            self.steer_angle += 1;
+            self.steer();
+        }
+    }
+
+    fn right_steer(&mut self) {
+        if self.steer_angle > -5 {
+            self.steer_angle -= 1;
+            self.steer();
         }
     }
 }
@@ -291,10 +306,9 @@ fn main() {
         } else if window.is_key_pressed(Key::Down, KeyRepeat::Yes) {
             car.forward(-10.);
         } else if window.is_key_pressed(Key::Left, KeyRepeat::Yes) {
-            car.steer_angle += 1;
-            car.steer();
+            car.left_steer();
         } else if window.is_key_pressed(Key::Right, KeyRepeat::Yes) {
-            car.steer_angle -= 1;
+            car.right_steer();
         }
         car.draw(&mut dt);
         window.update_with_buffer(dt.get_data(), size.0, size.1).unwrap();
