@@ -1,18 +1,18 @@
 use linear_algebra::{Matrix, Vector2D};
 use minifb::{Window, WindowOptions, Key, KeyRepeat};
+use parallel_parking::{ParallelParking, WINDOW_HEIGHT, WINDOW_WIDTH};
 use raqote::{DrawTarget, SolidSource, Source, DrawOptions, PathBuilder};
 
 mod linear_algebra;
+mod parallel_parking;
 
-const WIDTH: usize = 600;
-const HEIGHT: usize = 600;
 const CAR_WIDTH: f32 = 75.;
 const CAR_HEIGHT: f32 = 130.;
 const WHEEL_WIDTH: f32 = 15.;
 const WHEEL_HEIGHT: f32 = 25.;
 
 fn coordinate_convert(y: f32) -> f32 {
-    HEIGHT as f32 - y
+    WINDOW_HEIGHT as f32 - y
 }
 
 fn new_rotation_matrix(angle: f32) -> Matrix<2, 2> {
@@ -72,6 +72,7 @@ impl Rotation {
     }
 }
 
+#[derive(Clone, Copy)]
 struct Rect {
     origin: Point,
     width: f32,
@@ -271,19 +272,19 @@ impl Car {
         if angle == 0 {
             None
         } else {
-            Some(800./(angle as f32))
+            Some(600./(angle as f32))
         }
     }
 
     fn left_steer(&mut self) {
-        if self.steer_angle < 5 {
+        if self.steer_angle < 4 {
             self.steer_angle += 1;
             self.steer();
         }
     }
 
     fn right_steer(&mut self) {
-        if self.steer_angle > -5 {
+        if self.steer_angle > -4 {
             self.steer_angle -= 1;
             self.steer();
         }
@@ -292,15 +293,15 @@ impl Car {
 
 
 fn main() {
-    let mut window = Window::new("Car-Simulation", WIDTH, HEIGHT, WindowOptions {
+    let mut map = ParallelParking::new();
+    let mut window = Window::new("Car-Simulation", WINDOW_WIDTH as usize, WINDOW_HEIGHT as usize, WindowOptions {
                                     ..WindowOptions::default()
                                 }).unwrap();
     let size = window.get_size();
-    let mut dt = DrawTarget::new(size.0 as i32, size.1 as i32);
-
-    let mut car = Car::new(point2((WIDTH/2) as f32, (HEIGHT/2) as f32));
+    let mut car = Car::new(map.car_start_origin());
     loop {
-        dt.clear(SolidSource::from_unpremultiplied_argb(0xff, 0xff, 0xff, 0xff));
+        map.dt.clear(SolidSource::from_unpremultiplied_argb(0xff, 0xff, 0xff, 0xff));
+        map.draw();
         if window.is_key_pressed(Key::Up, KeyRepeat::Yes) {
             car.forward(10.);
         } else if window.is_key_pressed(Key::Down, KeyRepeat::Yes) {
@@ -310,7 +311,7 @@ fn main() {
         } else if window.is_key_pressed(Key::Right, KeyRepeat::Yes) {
             car.right_steer();
         }
-        car.draw(&mut dt);
-        window.update_with_buffer(dt.get_data(), size.0, size.1).unwrap();
+        car.draw(&mut map.dt);
+        window.update_with_buffer(map.dt.get_data(), size.0, size.1).unwrap();
     }
 }
