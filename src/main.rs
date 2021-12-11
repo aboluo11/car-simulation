@@ -300,7 +300,6 @@ fn main() {
     let size = window.get_size();
     let mut car = Car::new(map.car_start_origin());
     loop {
-        map.dt.clear(SolidSource::from_unpremultiplied_argb(0xff, 0xff, 0xff, 0xff));
         map.draw();
         if window.is_key_pressed(Key::Up, KeyRepeat::Yes) {
             car.forward(10.);
