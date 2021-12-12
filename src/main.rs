@@ -6,13 +6,20 @@ use raqote::{DrawTarget, SolidSource, Source, DrawOptions, PathBuilder};
 mod linear_algebra;
 mod parallel_parking;
 
-const CAR_WIDTH: f32 = 75.;
-const CAR_HEIGHT: f32 = 130.;
-const WHEEL_WIDTH: f32 = 15.;
-const WHEEL_HEIGHT: f32 = 25.;
+const CAR_WIDTH: f32 = 1.837;
+const CAR_HEIGHT: f32 = 4.765;
+const WHEEL_WIDTH: f32 = 0.215;
+const WHEEL_HEIGHT: f32 = WHEEL_WIDTH*0.55*2.+1./39.37*17.;
+const TURNING_RADIUS: f32 = 5.5;
+const TURNING_COUNT: i32 = 4;
+const SCALE: f32 = 30.;
+const TRACK_WIDTH: f32 = 1.58;
+const FRONT_SUSPENSION: f32 = 0.92;
+const REAR_SUSPENSION: f32 = 1.05;
 
-fn coordinate_convert(y: f32) -> f32 {
-    WINDOW_HEIGHT as f32 - y
+
+fn coordinate_convert(x: f32, y: f32) -> (f32, f32) {
+    (x * SCALE, (WINDOW_HEIGHT as f32 - y) * SCALE)
 }
 
 fn new_rotation_matrix(angle: f32) -> Matrix<2, 2> {
@@ -111,10 +118,14 @@ impl Rect {
     }
 
     fn draw(&self, pb: &mut PathBuilder) {
-        pb.move_to(self.lt().x, coordinate_convert(self.lt().y));
-        pb.line_to(self.rt().x, coordinate_convert(self.rt().y));
-        pb.line_to(self.rb().x, coordinate_convert(self.rb().y));
-        pb.line_to(self.lb().x, coordinate_convert(self.lb().y));
+        let (x, y) = coordinate_convert(self.lt().x, self.lt().y);
+        pb.move_to(x, y);
+        let (x, y) = coordinate_convert(self.rt().x, self.rt().y);
+        pb.line_to(x, y);
+        let (x, y) = coordinate_convert(self.rb().x, self.rb().y);
+        pb.line_to(x, y);
+        let (x, y) = coordinate_convert(self.lb().x, self.lb().y);
+        pb.line_to(x, y);
         pb.close();
     }
 
@@ -144,13 +155,13 @@ struct Car {
 impl Car {
     fn new(body_origin: Point) -> Car {
         let body = Rect::new(body_origin, CAR_WIDTH, CAR_HEIGHT);
-        let lt = Rect::new(point2(-CAR_WIDTH/2.+body.origin.x+3.+WHEEL_WIDTH/2., CAR_HEIGHT/4.+body.origin.y),
+        let lt = Rect::new(point2(body.origin.x-TRACK_WIDTH/2., CAR_HEIGHT/2.+body.origin.y-FRONT_SUSPENSION),
         WHEEL_WIDTH, WHEEL_HEIGHT);
-        let rt = Rect::new(point2(body.origin.x+CAR_WIDTH/2.-3.-WHEEL_WIDTH/2., CAR_HEIGHT/4.+body.origin.y),
+        let rt = Rect::new(point2(body.origin.x+TRACK_WIDTH/2., CAR_HEIGHT/2.+body.origin.y-FRONT_SUSPENSION),
         WHEEL_WIDTH, WHEEL_HEIGHT);
-        let lb = Rect::new(point2(-CAR_WIDTH/2.+body.origin.x+3.+WHEEL_WIDTH/2., -CAR_HEIGHT/4.+body.origin.y),
+        let lb = Rect::new(point2(body.origin.x-TRACK_WIDTH/2., -CAR_HEIGHT/2.+body.origin.y+REAR_SUSPENSION),
         WHEEL_WIDTH, WHEEL_HEIGHT);
-        let rb = Rect::new(point2(body.origin.x+CAR_WIDTH/2.-3.-WHEEL_WIDTH/2., -CAR_HEIGHT/4.+body.origin.y),
+        let rb = Rect::new(point2(body.origin.x+TRACK_WIDTH/2., -CAR_HEIGHT/2.+body.origin.y+REAR_SUSPENSION),
         WHEEL_WIDTH, WHEEL_HEIGHT);
         Car {
             lt, rt, lb, rb, body, steer_angle: 0,
@@ -272,19 +283,22 @@ impl Car {
         if angle == 0 {
             None
         } else {
-            Some(600./(angle as f32))
+            Some(
+                (TURNING_COUNT as f32)*(f32::sqrt(TURNING_RADIUS*TURNING_RADIUS-self.L()*self.L())-self.T()/2.)
+                    /(angle as f32)
+            )
         }
     }
 
     fn left_steer(&mut self) {
-        if self.steer_angle < 4 {
+        if self.steer_angle < TURNING_COUNT {
             self.steer_angle += 1;
             self.steer();
         }
     }
 
     fn right_steer(&mut self) {
-        if self.steer_angle > -4 {
+        if self.steer_angle > -TURNING_COUNT {
             self.steer_angle -= 1;
             self.steer();
         }
@@ -294,7 +308,8 @@ impl Car {
 
 fn main() {
     let mut map = ParallelParking::new();
-    let mut window = Window::new("Car-Simulation", WINDOW_WIDTH as usize, WINDOW_HEIGHT as usize, WindowOptions {
+    let mut window = Window::new("Car-Simulation", 
+    (WINDOW_WIDTH*SCALE) as usize, (WINDOW_HEIGHT*SCALE) as usize, WindowOptions {
                                     ..WindowOptions::default()
                                 }).unwrap();
     let size = window.get_size();
@@ -302,9 +317,9 @@ fn main() {
     loop {
         map.draw();
         if window.is_key_pressed(Key::Up, KeyRepeat::Yes) {
-            car.forward(10.);
+            car.forward(0.3);
         } else if window.is_key_pressed(Key::Down, KeyRepeat::Yes) {
-            car.forward(-10.);
+            car.forward(-0.3);
         } else if window.is_key_pressed(Key::Left, KeyRepeat::Yes) {
             car.left_steer();
         } else if window.is_key_pressed(Key::Right, KeyRepeat::Yes) {

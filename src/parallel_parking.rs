@@ -1,12 +1,12 @@
 use raqote::{DrawTarget, SolidSource, PathBuilder, Source, DrawOptions};
 
-use crate::{CAR_HEIGHT, CAR_WIDTH, Rect, point2, Point};
+use crate::{CAR_HEIGHT, CAR_WIDTH, Point, Rect, SCALE, point2};
 
 const ROAD_WIDTH: f32 = CAR_WIDTH * 2.;
-const PARKING_LENGTH: f32 = CAR_HEIGHT * 1.5;
-const PARKING_WIDTH: f32 = CAR_WIDTH * 1.2;
-pub const WINDOW_WIDTH: f32 = 800.;
-pub const WINDOW_HEIGHT: f32 = 800.;
+const PARKING_LENGTH: f32 = 6.7;
+const PARKING_WIDTH: f32 = 2.6;
+pub const WINDOW_WIDTH: f32 = 800./SCALE;
+pub const WINDOW_HEIGHT: f32 = 800./SCALE;
 
 
 pub struct ParallelParking {
@@ -23,7 +23,7 @@ impl ParallelParking {
             parking_space: Rect::new(
                 point2(road.origin.x+ROAD_WIDTH/2.+PARKING_WIDTH/2., road.origin.y),
                 PARKING_WIDTH, PARKING_LENGTH),
-            dt: DrawTarget::new(WINDOW_WIDTH as i32, WINDOW_HEIGHT as i32),
+            dt: DrawTarget::new((WINDOW_WIDTH*SCALE) as i32, (WINDOW_HEIGHT*SCALE) as i32),
         }
     }
 
