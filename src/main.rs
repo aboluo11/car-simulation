@@ -314,7 +314,8 @@ fn main() {
                                 }).unwrap();
     let size = window.get_size();
     let mut car = Car::new(map.car_start_origin());
-    loop {
+    window.limit_update_rate(Some(std::time::Duration::from_micros(16000)));
+    while window.is_open() {
         map.draw();
         if window.is_key_pressed(Key::Up, KeyRepeat::Yes) {
             car.forward(0.3);

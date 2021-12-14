@@ -2,7 +2,7 @@ use raqote::{DrawTarget, SolidSource, PathBuilder, Source, DrawOptions};
 
 use crate::{CAR_HEIGHT, CAR_WIDTH, Point, Rect, SCALE, point2};
 
-const ROAD_WIDTH: f32 = CAR_WIDTH * 2.;
+const ROAD_WIDTH: f32 = CAR_WIDTH * 3.;
 const PARKING_LENGTH: f32 = 6.7;
 const PARKING_WIDTH: f32 = 2.6;
 pub const WINDOW_WIDTH: f32 = 800./SCALE;
