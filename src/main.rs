@@ -1,13 +1,18 @@
+use back_parking::BackParking;
 use linear_algebra::{Matrix, Vector2D};
 use minifb::{Window, WindowOptions, Key, KeyRepeat};
 use parallel_parking::{ParallelParking, WINDOW_HEIGHT, WINDOW_WIDTH};
-use raqote::{DrawTarget, SolidSource, Source, DrawOptions, PathBuilder};
+use raqote::{DrawTarget, SolidSource, Source, DrawOptions, PathBuilder, Image, ExtendMode, FilterMode, Transform};
+use tiny_skia::Pixmap;
 
 mod linear_algebra;
 mod parallel_parking;
+mod back_parking;
 
 const CAR_WIDTH: f32 = 1.837;
 const CAR_HEIGHT: f32 = 4.765;
+const LOGO_WIDTH: f32 = 0.6;
+const LOGO_HEIGHT: f32 = 0.6;
 const WHEEL_WIDTH: f32 = 0.215;
 const WHEEL_HEIGHT: f32 = WHEEL_WIDTH*0.55*2.+1./39.37*17.;
 const TURNING_RADIUS: f32 = 5.5;
@@ -19,7 +24,7 @@ const REAR_SUSPENSION: f32 = 1.05;
 
 
 fn coordinate_convert(x: f32, y: f32) -> (f32, f32) {
-    (x * SCALE, (WINDOW_HEIGHT as f32 - y) * SCALE)
+    (x * SCALE, (WINDOW_HEIGHT - y) * SCALE)
 }
 
 fn new_rotation_matrix(angle: f32) -> Matrix<2, 2> {
@@ -117,7 +122,16 @@ impl Rect {
             .rotate(Rotation { rotation_matrix: self.rotation_matrix, origin: self.origin })
     }
 
-    fn draw(&self, pb: &mut PathBuilder) {
+    fn draw(&self, dt: &mut DrawTarget, color: SolidSource) {
+        dt.fill(
+            &self.path(),
+            &Source::Solid(color),
+            &DrawOptions::new()
+        );
+    }
+
+    fn path(&self) -> raqote::Path {
+        let mut pb = PathBuilder::new();
         let (x, y) = coordinate_convert(self.lt().x, self.lt().y);
         pb.move_to(x, y);
         let (x, y) = coordinate_convert(self.rt().x, self.rt().y);
@@ -127,6 +141,7 @@ impl Rect {
         let (x, y) = coordinate_convert(self.lb().x, self.lb().y);
         pb.line_to(x, y);
         pb.close();
+        pb.finish()
     }
 
     fn rotate_self(&mut self, rotation_matrix: Matrix<2,2>) {
@@ -143,6 +158,71 @@ impl Rect {
     }
 }
 
+struct Logo {
+    data: Vec<u32>,
+    outline: Rect,
+}
+
+impl Logo {
+    fn new(path: &std::path::Path, origin: Point, width: f32, height: f32) -> Self {
+        let svg = usvg::Tree::from_data(&std::fs::read(path).unwrap(), &usvg::Options::default().to_ref()).unwrap();
+        let mut pixmap = tiny_skia::Pixmap::new((width*SCALE) as u32, (height*SCALE) as u32).unwrap();
+        resvg::render(&svg, usvg::FitTo::Size((width*SCALE) as u32, (height*SCALE) as u32), pixmap.as_mut()).unwrap();
+        let mut data = vec![];
+        for chunk in pixmap.data().chunks(4) {
+            if let &[r, g, b, a] = chunk {
+                data.push(u32::from_be_bytes([a, r, g, b]));
+            }
+        }
+        Logo {
+            data,
+            outline: Rect::new(origin, width, height),
+        }
+    }
+
+    fn draw(&self, dt: &mut DrawTarget) {
+        let image = raqote::Image {
+            width: (self.outline.width*SCALE) as i32,
+            height: (self.outline.height*SCALE) as i32,
+            data: self.data.as_slice()
+        };
+        let rot_inv = self.outline.rotation_matrix.inverse().unwrap();
+        dt.fill(
+            &self.outline.path(), 
+            &Source::Image(
+                image,
+                ExtendMode::Pad,
+                FilterMode::Bilinear,
+                Transform::row_major(1./SCALE, 0., 0., -1./SCALE, 0., WINDOW_HEIGHT)
+                    .post_transform(&Transform::create_translation(-self.outline.origin.x, -self.outline.origin.y))
+                    .post_transform(&Transform::row_major(
+                        rot_inv.inner[0][0],
+                        rot_inv.inner[1][0],
+                        rot_inv.inner[0][1],
+                        rot_inv.inner[1][1],
+                        self.outline.width/2.,
+                        self.outline.height/2.,
+                    )).post_transform(&Transform::row_major(
+                        SCALE, 0., 0., -SCALE, 0., LOGO_HEIGHT*SCALE
+                    ))
+            ), 
+            &DrawOptions::new()
+        );
+    }
+
+    fn rotate_self(&mut self, rotation_matrix: Matrix<2,2>) {
+        self.outline.rotate_self(rotation_matrix);
+    }
+
+    fn rotate(&mut self, rotation: Rotation) {
+        self.outline.rotate(rotation);
+    }
+
+    fn forward(&mut self, distance: f32) {
+        self.outline.forward(distance);
+    }
+}
+
 struct Car {
     lt: Rect,
     rt: Rect,
@@ -150,43 +230,47 @@ struct Car {
     rb: Rect,
     body: Rect,
     steer_angle: i32,
+    logo: Logo,
 }
 
 impl Car {
-    fn new(body_origin: Point) -> Car {
-        let body = Rect::new(body_origin, CAR_WIDTH, CAR_HEIGHT);
-        let lt = Rect::new(point2(body.origin.x-TRACK_WIDTH/2., CAR_HEIGHT/2.+body.origin.y-FRONT_SUSPENSION),
+    fn new(body_origin: Point, angle: f32) -> Car {
+        let mut body = Rect::new(body_origin, CAR_WIDTH, CAR_HEIGHT);
+        let mut lt = Rect::new(point2(body.origin.x-TRACK_WIDTH/2., CAR_HEIGHT/2.+body.origin.y-FRONT_SUSPENSION),
         WHEEL_WIDTH, WHEEL_HEIGHT);
-        let rt = Rect::new(point2(body.origin.x+TRACK_WIDTH/2., CAR_HEIGHT/2.+body.origin.y-FRONT_SUSPENSION),
+        let mut rt = Rect::new(point2(body.origin.x+TRACK_WIDTH/2., CAR_HEIGHT/2.+body.origin.y-FRONT_SUSPENSION),
         WHEEL_WIDTH, WHEEL_HEIGHT);
-        let lb = Rect::new(point2(body.origin.x-TRACK_WIDTH/2., -CAR_HEIGHT/2.+body.origin.y+REAR_SUSPENSION),
+        let mut lb = Rect::new(point2(body.origin.x-TRACK_WIDTH/2., -CAR_HEIGHT/2.+body.origin.y+REAR_SUSPENSION),
         WHEEL_WIDTH, WHEEL_HEIGHT);
-        let rb = Rect::new(point2(body.origin.x+TRACK_WIDTH/2., -CAR_HEIGHT/2.+body.origin.y+REAR_SUSPENSION),
+        let mut rb = Rect::new(point2(body.origin.x+TRACK_WIDTH/2., -CAR_HEIGHT/2.+body.origin.y+REAR_SUSPENSION),
         WHEEL_WIDTH, WHEEL_HEIGHT);
+        let rotation = Rotation::new(angle, body_origin);
+        let mut logo = Logo::new(
+            std::path::Path::new("res/tesla.svg"),
+            point2(body_origin.x, body_origin.y+2./5.*CAR_HEIGHT),
+            LOGO_WIDTH,
+            LOGO_HEIGHT,
+        );
+        logo.rotate(rotation);
+        body.rotate(rotation);
+        lt.rotate(rotation);
+        rt.rotate(rotation);
+        lb.rotate(rotation);
+        rb.rotate(rotation);
         Car {
-            lt, rt, lb, rb, body, steer_angle: 0,
+            lt, rt, lb, rb, body, steer_angle: 0, logo
         }
     }
 
     fn draw(&self, dt: &mut DrawTarget) {
-        let mut pb = PathBuilder::new();
-        self.body.draw(&mut pb);
-        dt.fill(
-            &pb.finish(),
-            &Source::Solid(SolidSource::from_unpremultiplied_argb(0xff, 0, 0xff, 0)),
-            &DrawOptions::new()
-        );
-
-        let mut pb = PathBuilder::new();
-        self.lt.draw(&mut pb);
-        self.rt.draw(&mut pb);
-        self.lb.draw(&mut pb);
-        self.rb.draw(&mut pb);
-        dt.fill(
-            &pb.finish(),
-            &Source::Solid(SolidSource::from_unpremultiplied_argb(0x7f, 0xff, 0, 0)),
-            &DrawOptions::new()
-        );
+        let body_color = SolidSource::from_unpremultiplied_argb(0x77, 0xff, 0, 0);
+        let wheel_color = SolidSource::from_unpremultiplied_argb(0x77, 0, 0, 0xff);
+        self.body.draw(dt, body_color);
+        self.lt.draw(dt, wheel_color);
+        self.rt.draw(dt, wheel_color);
+        self.lb.draw(dt, wheel_color);
+        self.rb.draw(dt, wheel_color);
+        self.logo.draw(dt);
     }
 
     fn angle_matrix(&self, r: f32) -> Matrix<2, 2> {
@@ -239,12 +323,14 @@ impl Car {
             self.lb.rotate(rotation);
             self.rb.rotate(rotation);
             self.body.rotate(rotation);
+            self.logo.rotate(rotation);
         } else {
             self.lt.forward(distance);
             self.rt.forward(distance);
             self.lb.forward(distance);
             self.rb.forward(distance);
             self.body.forward(distance);
+            self.logo.forward(distance);
         }
     }
 
@@ -307,13 +393,13 @@ impl Car {
 
 
 fn main() {
-    let mut map = ParallelParking::new();
+    let mut map = BackParking::new();
     let mut window = Window::new("Car-Simulation", 
     (WINDOW_WIDTH*SCALE) as usize, (WINDOW_HEIGHT*SCALE) as usize, WindowOptions {
                                     ..WindowOptions::default()
                                 }).unwrap();
     let size = window.get_size();
-    let mut car = Car::new(map.car_start_origin());
+    let mut car = map.car();
     window.limit_update_rate(Some(std::time::Duration::from_micros(16000)));
     while window.is_open() {
         map.draw();
