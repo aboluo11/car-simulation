@@ -21,6 +21,10 @@ const SCALE: f32 = 30.;
 const TRACK_WIDTH: f32 = 1.58;
 const FRONT_SUSPENSION: f32 = 0.92;
 const REAR_SUSPENSION: f32 = 1.05;
+const MIRROR_WIDTH: f32 = 0.08;
+const MIRROR_HEIGHT: f32 = 0.35;
+const MIRROR_ANGLE: f32 = 70./180.*std::f32::consts::PI;
+const MIRROR_ORIGIN_TO_FRONT: f32 = 1.55-MIRROR_WIDTH/2.;
 
 
 fn coordinate_convert(x: f32, y: f32) -> (f32, f32) {
@@ -153,8 +157,8 @@ impl Rect {
         self.rotate_self(rotation.rotation_matrix);
     }
 
-    fn forward(&mut self, distance: f32) {
-        self.origin = self.origin.forward(distance, self.rotation_matrix);
+    fn forward(&mut self, distance: f32, rotation_matrix: Matrix<2,2>) {
+        self.origin = self.origin.forward(distance, rotation_matrix);
     }
 }
 
@@ -218,8 +222,8 @@ impl Logo {
         self.outline.rotate(rotation);
     }
 
-    fn forward(&mut self, distance: f32) {
-        self.outline.forward(distance);
+    fn forward(&mut self, distance: f32, rotation_matrix: Matrix<2,2>) {
+        self.outline.forward(distance, rotation_matrix);
     }
 }
 
@@ -231,6 +235,8 @@ struct Car {
     body: Rect,
     steer_angle: i32,
     logo: Logo,
+    left_mirror: Rect,
+    right_mirror: Rect,
 }
 
 impl Car {
@@ -244,21 +250,37 @@ impl Car {
         WHEEL_WIDTH, WHEEL_HEIGHT);
         let mut rb = Rect::new(point2(body.origin.x+TRACK_WIDTH/2., -CAR_HEIGHT/2.+body.origin.y+REAR_SUSPENSION),
         WHEEL_WIDTH, WHEEL_HEIGHT);
-        let rotation = Rotation::new(angle, body_origin);
         let mut logo = Logo::new(
             std::path::Path::new("res/tesla.svg"),
             point2(body_origin.x, body_origin.y+2./5.*CAR_HEIGHT),
             LOGO_WIDTH,
             LOGO_HEIGHT,
         );
-        logo.rotate(rotation);
+        let mut left_mirror = Rect::new(
+            point2(
+                body_origin.x-CAR_WIDTH/2.-MIRROR_HEIGHT/2.,
+                body_origin.y+CAR_HEIGHT/2.-MIRROR_ORIGIN_TO_FRONT,
+            ), MIRROR_WIDTH, MIRROR_HEIGHT);
+        let mut right_mirror = Rect::new(
+            point2(
+                body_origin.x+CAR_WIDTH/2.+MIRROR_HEIGHT/2.,
+                body_origin.y+CAR_HEIGHT/2.-MIRROR_ORIGIN_TO_FRONT,
+            ), MIRROR_WIDTH, MIRROR_HEIGHT);
+        left_mirror.rotate_self(new_rotation_matrix(std::f32::consts::PI/2.));
+        right_mirror.rotate_self(new_rotation_matrix(std::f32::consts::PI/2.));
+        left_mirror.rotate(Rotation::new(std::f32::consts::PI/2.-MIRROR_ANGLE, left_mirror.rb()));
+        right_mirror.rotate(Rotation::new(-(std::f32::consts::PI/2.-MIRROR_ANGLE), right_mirror.rt()));
+        let rotation = Rotation::new(angle, body_origin);
         body.rotate(rotation);
         lt.rotate(rotation);
         rt.rotate(rotation);
         lb.rotate(rotation);
         rb.rotate(rotation);
+        logo.rotate(rotation);
+        left_mirror.rotate(rotation);
+        right_mirror.rotate(rotation);
         Car {
-            lt, rt, lb, rb, body, steer_angle: 0, logo
+            lt, rt, lb, rb, body, steer_angle: 0, logo, left_mirror, right_mirror
         }
     }
 
@@ -271,6 +293,8 @@ impl Car {
         self.lb.draw(dt, wheel_color);
         self.rb.draw(dt, wheel_color);
         self.logo.draw(dt);
+        self.left_mirror.draw(dt, body_color);
+        self.right_mirror.draw(dt, body_color);
     }
 
     fn angle_matrix(&self, r: f32) -> Matrix<2, 2> {
@@ -324,13 +348,18 @@ impl Car {
             self.rb.rotate(rotation);
             self.body.rotate(rotation);
             self.logo.rotate(rotation);
+            self.left_mirror.rotate(rotation);
+            self.right_mirror.rotate(rotation);
         } else {
-            self.lt.forward(distance);
-            self.rt.forward(distance);
-            self.lb.forward(distance);
-            self.rb.forward(distance);
-            self.body.forward(distance);
-            self.logo.forward(distance);
+            let rotation_matrix = self.body.rotation_matrix;
+            self.lt.forward(distance, rotation_matrix);
+            self.rt.forward(distance, rotation_matrix);
+            self.lb.forward(distance, rotation_matrix);
+            self.rb.forward(distance, rotation_matrix);
+            self.body.forward(distance, rotation_matrix);
+            self.logo.forward(distance, rotation_matrix);
+            self.left_mirror.forward(distance, rotation_matrix);
+            self.right_mirror.forward(distance, rotation_matrix);
         }
     }
 
@@ -400,7 +429,7 @@ fn main() {
                                 }).unwrap();
     let size = window.get_size();
     let mut car = map.car();
-    window.limit_update_rate(Some(std::time::Duration::from_micros(16000)));
+    // window.limit_update_rate(Some(std::time::Duration::from_micros(16000)));
     while window.is_open() {
         map.draw();
         if window.is_key_pressed(Key::Up, KeyRepeat::Yes) {
