@@ -4,7 +4,7 @@ use crate::{CAR_HEIGHT, CAR_WIDTH, Point, Rect, SCALE, point2, Car};
 
 const ROAD_WIDTH: f32 = CAR_WIDTH * 3.;
 const PARKING_LENGTH: f32 = 6.7;
-const PARKING_WIDTH: f32 = 2.6;
+const PARKING_WIDTH: f32 = 2.7;
 pub const WINDOW_WIDTH: f32 = 800./SCALE;
 pub const WINDOW_HEIGHT: f32 = 800./SCALE;
 

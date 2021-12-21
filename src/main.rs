@@ -11,8 +11,7 @@ mod back_parking;
 
 const CAR_WIDTH: f32 = 1.837;
 const CAR_HEIGHT: f32 = 4.765;
-const LOGO_WIDTH: f32 = 0.6;
-const LOGO_HEIGHT: f32 = 0.6;
+const LOGO_WIDTH: f32 = 1.0;
 const WHEEL_WIDTH: f32 = 0.215;
 const WHEEL_HEIGHT: f32 = WHEEL_WIDTH*0.55*2.+1./39.37*17.;
 const TURNING_RADIUS: f32 = 5.5;
@@ -168,10 +167,12 @@ struct Logo {
 }
 
 impl Logo {
-    fn new(path: &std::path::Path, origin: Point, width: f32, height: f32) -> Self {
+    fn new(path: &std::path::Path, origin: Point, width: f32) -> Self {
         let svg = usvg::Tree::from_data(&std::fs::read(path).unwrap(), &usvg::Options::default().to_ref()).unwrap();
+        let (svg_ori_width, svg_ori_height) = (svg.svg_node().size.width(), svg.svg_node().size.height());
+        let height = (svg_ori_height/svg_ori_width) as f32 * width;
         let mut pixmap = tiny_skia::Pixmap::new((width*SCALE) as u32, (height*SCALE) as u32).unwrap();
-        resvg::render(&svg, usvg::FitTo::Size((width*SCALE) as u32, (height*SCALE) as u32), pixmap.as_mut()).unwrap();
+        resvg::render(&svg, usvg::FitTo::Width((width*SCALE) as u32), pixmap.as_mut()).unwrap();
         let mut data = vec![];
         for chunk in pixmap.data().chunks(4) {
             if let &[r, g, b, a] = chunk {
@@ -207,7 +208,7 @@ impl Logo {
                         self.outline.width/2.,
                         self.outline.height/2.,
                     )).post_transform(&Transform::row_major(
-                        SCALE, 0., 0., -SCALE, 0., LOGO_HEIGHT*SCALE
+                        SCALE, 0., 0., -SCALE, 0., self.outline.height*SCALE
                     ))
             ), 
             &DrawOptions::new()
@@ -251,11 +252,11 @@ impl Car {
         let mut rb = Rect::new(point2(body.origin.x+TRACK_WIDTH/2., -CAR_HEIGHT/2.+body.origin.y+REAR_SUSPENSION),
         WHEEL_WIDTH, WHEEL_HEIGHT);
         let mut logo = Logo::new(
-            std::path::Path::new("res/tesla.svg"),
-            point2(body_origin.x, body_origin.y+2./5.*CAR_HEIGHT),
+            std::path::Path::new("res/比亚迪logo.svg"),
+            point2(body_origin.x, body_origin.y+CAR_HEIGHT/2.-0.2),
             LOGO_WIDTH,
-            LOGO_HEIGHT,
         );
+        logo.outline.origin.y -= logo.outline.height/2.;
         let mut left_mirror = Rect::new(
             point2(
                 body_origin.x-CAR_WIDTH/2.-MIRROR_HEIGHT/2.,
@@ -422,7 +423,7 @@ impl Car {
 
 
 fn main() {
-    let mut map = BackParking::new();
+    let mut map = ParallelParking::new();
     let mut window = Window::new("Car-Simulation", 
     (WINDOW_WIDTH*SCALE) as usize, (WINDOW_HEIGHT*SCALE) as usize, WindowOptions {
                                     ..WindowOptions::default()
