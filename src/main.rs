@@ -2,8 +2,7 @@ use back_parking::BackParking;
 use linear_algebra::{Matrix, Vector2D};
 use minifb::{Window, WindowOptions, Key, KeyRepeat};
 use parallel_parking::{ParallelParking, WINDOW_HEIGHT, WINDOW_WIDTH};
-use raqote::{DrawTarget, SolidSource, Source, DrawOptions, PathBuilder, Image, ExtendMode, FilterMode, Transform};
-use tiny_skia::Pixmap;
+use raqote::{DrawTarget, SolidSource, Source, DrawOptions, PathBuilder, Image, ExtendMode, FilterMode, Transform, BlendMode, AntialiasMode};
 
 mod linear_algebra;
 mod parallel_parking;
@@ -129,7 +128,11 @@ impl Rect {
         dt.fill(
             &self.path(),
             &Source::Solid(color),
-            &DrawOptions::new()
+            &DrawOptions {
+                blend_mode: BlendMode::Src,
+                alpha: 1.,
+                antialias: AntialiasMode::Gray,
+            }
         );
     }
 
@@ -211,7 +214,11 @@ impl Logo {
                         SCALE, 0., 0., -SCALE, 0., self.outline.height*SCALE
                     ))
             ), 
-            &DrawOptions::new()
+            &DrawOptions {
+                blend_mode: BlendMode::SrcOver,
+                alpha: 1.,
+                antialias: AntialiasMode::Gray,
+            }
         );
     }
 
@@ -286,8 +293,8 @@ impl Car {
     }
 
     fn draw(&self, dt: &mut DrawTarget) {
-        let body_color = SolidSource::from_unpremultiplied_argb(0x77, 0xff, 0, 0);
-        let wheel_color = SolidSource::from_unpremultiplied_argb(0x77, 0, 0, 0xff);
+        let body_color = SolidSource::from_unpremultiplied_argb(0xff, 24, 174, 219);
+        let wheel_color = SolidSource::from_unpremultiplied_argb(0xff, 0, 0, 0);
         self.body.draw(dt, body_color);
         self.lt.draw(dt, wheel_color);
         self.rt.draw(dt, wheel_color);
@@ -430,7 +437,6 @@ fn main() {
                                 }).unwrap();
     let size = window.get_size();
     let mut car = map.car();
-    // window.limit_update_rate(Some(std::time::Duration::from_micros(16000)));
     while window.is_open() {
         map.draw();
         if window.is_key_pressed(Key::Up, KeyRepeat::Yes) {
