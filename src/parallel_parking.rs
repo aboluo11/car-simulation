@@ -4,7 +4,7 @@ use crate::{CAR_HEIGHT, CAR_WIDTH, Point, Rect, SCALE, point2, Car, Map, WINDOW_
 
 const ROAD_WIDTH: f32 = CAR_WIDTH * 3.;
 const PARKING_LENGTH: f32 = 6.7;
-const PARKING_WIDTH: f32 = 2.7;
+const PARKING_WIDTH: f32 = 3.0;
 
 
 pub struct ParallelParking {

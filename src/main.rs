@@ -479,7 +479,7 @@ fn main() {
         pixel2real((100., 50.).into()).into(), 100./SCALE, 50./SCALE, 
     &|| Box::new(BackParking::new()), "倒车入库");
     let parallel_parking_button = Button::new(
-        pixel2real((100., 150.).into()).into(), 100./SCALE, 50./SCALE,
+        pixel2real((100., 125.).into()).into(), 100./SCALE, 50./SCALE,
         &|| Box::new(ParallelParking::new()), "侧方停车");
     let buttons = vec![back_parking_button, parallel_parking_button];
     while window.is_open() {

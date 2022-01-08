@@ -10,7 +10,8 @@ pub struct Button<'a> {
 }
 
 impl<'a> Button<'a> {
-    pub fn new(origin: Point, width: f32, height: f32, call_back: &'a dyn Fn() -> Box<dyn Map>, text: &'static str) -> Button<'a> {
+    pub fn new(origin: Point, width: f32, height: f32, 
+        call_back: &'a dyn Fn() -> Box<dyn Map>, text: &'static str) -> Button<'a> {
         Button {
             outline: Rect::new(origin, width, height),
             call_back,
