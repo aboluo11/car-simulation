@@ -1,13 +1,21 @@
 use back_parking::BackParking;
 use linear_algebra::{Matrix, Vector2D};
-use minifb::{Window, WindowOptions, Key, KeyRepeat};
-use parallel_parking::{ParallelParking, WINDOW_HEIGHT, WINDOW_WIDTH};
+use minifb::{Window, WindowOptions, Key, KeyRepeat, MouseButton, Scale};
+use parallel_parking::ParallelParking;
 use raqote::{DrawTarget, SolidSource, Source, DrawOptions, PathBuilder, Image, ExtendMode, FilterMode, Transform, BlendMode, AntialiasMode};
+use font_kit::family_name::FamilyName;
+use font_kit::properties::Properties;
+use font_kit::source::{SystemSource};
+
+use button::Button;
 
 mod linear_algebra;
 mod parallel_parking;
 mod back_parking;
+mod button;
 
+const WINDOW_WIDTH: f32 = 800./SCALE;
+const WINDOW_HEIGHT: f32 = 800./SCALE;
 const CAR_WIDTH: f32 = 1.837;
 const CAR_HEIGHT: f32 = 4.765;
 const LOGO_WIDTH: f32 = 1.0;
@@ -25,8 +33,12 @@ const MIRROR_ANGLE: f32 = 70./180.*std::f32::consts::PI;
 const MIRROR_ORIGIN_TO_FRONT: f32 = 1.55-MIRROR_WIDTH/2.;
 
 
-fn coordinate_convert(x: f32, y: f32) -> (f32, f32) {
-    (x * SCALE, (WINDOW_HEIGHT - y) * SCALE)
+fn real2pixel(p: Point) -> Point {
+    point2(p.x * SCALE, (WINDOW_HEIGHT - p.y) * SCALE)
+}
+
+fn pixel2real(p: Point) -> Point {
+    point2(p.x / SCALE, WINDOW_HEIGHT-p.y/SCALE)
 }
 
 fn new_rotation_matrix(angle: f32) -> Matrix<2, 2> {
@@ -37,7 +49,7 @@ fn new_rotation_matrix(angle: f32) -> Matrix<2, 2> {
 }
 
 #[derive(Clone, Copy)]
-struct Point {
+pub struct Point {
     x: f32,
     y: f32,
 }
@@ -59,6 +71,24 @@ impl Point {
 
     fn to_vector(&self) -> Vector2D {
         Vector2D::new_from_x_and_y(self.x, self.y)
+    }
+}
+
+impl From<(f32, f32)> for Point {
+    fn from(p: (f32, f32)) -> Self {
+        point2(p.0, p.1)
+    }
+}
+
+impl From<Point> for raqote::Point {
+    fn from(p: Point) -> Self {
+        raqote::Point::new(p.x, p.y)
+    }
+}
+
+impl From<Point> for (f32, f32) {
+    fn from(p: Point) -> Self {
+        (p.x, p.y)
     }
 }
 
@@ -138,13 +168,13 @@ impl Rect {
 
     fn path(&self) -> raqote::Path {
         let mut pb = PathBuilder::new();
-        let (x, y) = coordinate_convert(self.lt().x, self.lt().y);
+        let (x, y) = real2pixel(self.lt()).into();
         pb.move_to(x, y);
-        let (x, y) = coordinate_convert(self.rt().x, self.rt().y);
+        let (x, y) = real2pixel(self.rt()).into();
         pb.line_to(x, y);
-        let (x, y) = coordinate_convert(self.rb().x, self.rb().y);
+        let (x, y) = real2pixel(self.rb()).into();
         pb.line_to(x, y);
-        let (x, y) = coordinate_convert(self.lb().x, self.lb().y);
+        let (x, y) = real2pixel(self.lb()).into();
         pb.line_to(x, y);
         pb.close();
         pb.finish()
@@ -259,7 +289,7 @@ impl Car {
         let mut rb = Rect::new(point2(body.origin.x+TRACK_WIDTH/2., -CAR_HEIGHT/2.+body.origin.y+REAR_SUSPENSION),
         WHEEL_WIDTH, WHEEL_HEIGHT);
         let mut logo = Logo::new(
-            std::path::Path::new("res/比亚迪logo.svg"),
+            std::path::Path::new("res/tesla.svg"),
             point2(body_origin.x, body_origin.y+CAR_HEIGHT/2.-0.2),
             LOGO_WIDTH,
         );
@@ -428,17 +458,46 @@ impl Car {
     }
 }
 
+trait Map {
+    fn draw(&mut self, dt: &mut DrawTarget);
+    fn car(&self) -> Car;
+}
+
 
 fn main() {
-    let mut map = ParallelParking::new();
+    let font = font_kit::font::Font::from_path("C:\\Windows\\Fonts\\Deng.ttf", 0)
+        .unwrap();
+    let mut dt = DrawTarget::new((WINDOW_WIDTH*SCALE) as i32, (WINDOW_HEIGHT*SCALE) as i32);
+    let mut map: Box<dyn Map> = Box::new(ParallelParking::new());
+    let mut car = map.car();
     let mut window = Window::new("Car-Simulation", 
     (WINDOW_WIDTH*SCALE) as usize, (WINDOW_HEIGHT*SCALE) as usize, WindowOptions {
                                     ..WindowOptions::default()
                                 }).unwrap();
     let size = window.get_size();
-    let mut car = map.car();
+    let back_parking_button = Button::new(
+        pixel2real((100., 50.).into()).into(), 100./SCALE, 50./SCALE, 
+    &|| Box::new(BackParking::new()), "倒车入库");
+    let parallel_parking_button = Button::new(
+        pixel2real((100., 150.).into()).into(), 100./SCALE, 50./SCALE,
+        &|| Box::new(ParallelParking::new()), "侧方停车");
+    let buttons = vec![back_parking_button, parallel_parking_button];
     while window.is_open() {
-        map.draw();
+        if window.get_mouse_down(MouseButton::Left) {
+            let pixel_point: Point = window.get_mouse_pos(minifb::MouseMode::Clamp).unwrap().into();
+            let point: Point = pixel2real(pixel_point).into();
+            for button in buttons.iter() {
+                if button.in_range(point) {
+                    map = button.on_click();
+                    car = map.car();
+                    break;
+                }
+            }
+        }
+        map.draw(&mut dt);
+        for button in buttons.iter() {
+            button.draw(&mut dt, &font);
+        }
         if window.is_key_pressed(Key::Up, KeyRepeat::Yes) {
             car.forward(0.3);
         } else if window.is_key_pressed(Key::Down, KeyRepeat::Yes) {
@@ -448,7 +507,7 @@ fn main() {
         } else if window.is_key_pressed(Key::Right, KeyRepeat::Yes) {
             car.right_steer();
         }
-        car.draw(&mut map.dt);
-        window.update_with_buffer(map.dt.get_data(), size.0, size.1).unwrap();
+        car.draw(&mut dt);
+        window.update_with_buffer(dt.get_data(), size.0, size.1).unwrap();
     }
 }
