@@ -28,6 +28,12 @@ impl Vector2D {
     }
 }
 
+impl From<(f32, f32)> for Vector2D {
+    fn from(p: (f32, f32)) -> Self {
+        Self::new_from_x_and_y(p.0, p.1)
+    }
+}
+
 impl<const R: usize, const C: usize> Matrix<R, C> {
     pub fn new(inner: [[f32; C]; R]) -> Self {
         Matrix {inner}
@@ -39,16 +45,6 @@ impl<const R: usize, const C: usize> Matrix<R, C> {
             sum += self.inner[row][i] * other.inner[i][col];
         }
         sum
-    }
-
-    pub fn multiply_matrix<const K: usize>(&self, other: Matrix<C, K>) -> Matrix<R, K> {
-        let mut inner: [[f32; K]; R] = [[0.; K]; R];
-        for r in 0..R {
-            for c in 0..K {
-                inner[r][c] = self.dot_product(r, other, c);
-            }
-        }
-        Matrix {inner}
     }
 
     pub fn sum(&self) -> f32 {
@@ -80,6 +76,19 @@ impl Matrix<2, 2> {
             [1., 0.],
             [0., 1.],
         ])
+    }
+}
+
+impl<const R: usize, const C: usize, const K: usize> ops::Mul<Matrix<C, K>> for Matrix<R, C> {
+    type Output = Matrix<R, K>;
+    fn mul(self, rhs: Matrix<C, K>) -> Matrix<R, K> {
+        let mut inner: [[f32; K]; R] = [[0.; K]; R];
+        for r in 0..R {
+            for c in 0..K {
+                inner[r][c] = self.dot_product(r, rhs, c);
+            }
+        }
+        Matrix {inner}
     }
 }
 
@@ -120,18 +129,5 @@ impl<const R: usize, const C: usize> ops::Mul<Matrix<R, C>> for f32 {
     type Output = Matrix<R, C>;
     fn mul(self, rhs: Matrix<R, C>) -> Matrix<R, C> {
         rhs * self
-    }
-}
-
-impl<const R: usize, const C: usize> ops::Mul<Matrix<R, C>> for Matrix<R, C> {
-    type Output = Matrix<R, C>;
-    fn mul(self, rhs: Matrix<R, C>) -> Matrix<R, C> {
-        let mut inner: [[f32; C]; R] = [[0.; C]; R];
-        for r in 0..R {
-            for c in 0..C {
-                inner[r][c] = self.inner[r][c] * rhs.inner[r][c];
-            }
-        }
-        Matrix::new(inner)
     }
 }

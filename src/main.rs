@@ -1,20 +1,19 @@
 use back_parking::BackParking;
 use linear_algebra::{Matrix, Vector2D};
-use minifb::{Window, WindowOptions, Key, KeyRepeat, MouseButton, Scale};
+use minifb::{Window, WindowOptions, Key, KeyRepeat, MouseButton};
 use parallel_parking::ParallelParking;
-use raqote::{DrawTarget, SolidSource, Source, DrawOptions, PathBuilder, Image, ExtendMode, FilterMode, Transform, BlendMode, AntialiasMode};
-use font_kit::family_name::FamilyName;
-use font_kit::properties::Properties;
-use font_kit::source::{SystemSource};
+use raqote::{DrawTarget, SolidSource, Source, DrawOptions, PathBuilder, ExtendMode, FilterMode, Transform, BlendMode, AntialiasMode};
+use std::ops;
 
 use button::Button;
 
 mod linear_algebra;
 mod parallel_parking;
 mod back_parking;
+// mod right_angle_turn;
 mod button;
 
-const WINDOW_WIDTH: f32 = 800./SCALE;
+const WINDOW_WIDTH: f32 = WINDOW_HEIGHT+MENU_WIDTH;
 const WINDOW_HEIGHT: f32 = 800./SCALE;
 const CAR_WIDTH: f32 = 1.837;
 const CAR_HEIGHT: f32 = 4.765;
@@ -31,7 +30,7 @@ const MIRROR_WIDTH: f32 = 0.08;
 const MIRROR_HEIGHT: f32 = 0.35;
 const MIRROR_ANGLE: f32 = 70./180.*std::f32::consts::PI;
 const MIRROR_ORIGIN_TO_FRONT: f32 = 1.55-MIRROR_WIDTH/2.;
-
+const MENU_WIDTH: f32 = 150./SCALE;
 
 fn real2pixel(p: Point) -> Point {
     point2(p.x * SCALE, (WINDOW_HEIGHT - p.y) * SCALE)
@@ -56,10 +55,7 @@ pub struct Point {
 
 impl Point {
     fn rotate(&self, rotation: Rotation) -> Point {
-        let p: Vector2D = self.to_vector();
-        let o: Vector2D = rotation.origin.to_vector();
-        let p_new = rotation.rotation_matrix.multiply_matrix(p-o) + o;
-        point2(p_new.x(), p_new.y())
+        rotation.rotation_matrix * (*self-rotation.origin) + rotation.origin
     }
 
     fn forward(&self, distance: f32, rotation_matrix: Matrix<2, 2>) -> Point {
@@ -69,8 +65,8 @@ impl Point {
         })
     }
 
-    fn to_vector(&self) -> Vector2D {
-        Vector2D::new_from_x_and_y(self.x, self.y)
+    fn translate(&self, translation: Vector2D) -> Point {
+        *self + translation
     }
 }
 
@@ -92,13 +88,50 @@ impl From<Point> for (f32, f32) {
     }
 }
 
+impl From<Vector2D> for Point {
+    fn from(p: Vector2D) -> Self {
+        point2(p.x(), p.y())
+    }
+}
+
+impl From<Point> for Vector2D {
+    fn from(p: Point) -> Self {
+        Vector2D::new_from_x_and_y(p.x, p.y)
+    }
+}
+
+impl ops::Sub<Point> for Point {
+    type Output = Vector2D;
+
+    fn sub(self, rhs: Point) -> Self::Output {
+        Vector2D::from(self) - Vector2D::from(rhs)
+    }
+}
+
+impl ops::Add<Vector2D> for Point {
+    type Output = Point;
+
+    fn add(self, rhs: Vector2D) -> Self::Output {
+        (Vector2D::from(self) + rhs).into()
+    }
+}
+
+impl ops::Add<Point> for Vector2D {
+    type Output = Point;
+
+    fn add(self, rhs: Point) -> Self::Output {
+        rhs + self
+    }
+}
+
+
 fn point2(x: f32, y: f32) -> Point {
     Point {x, y}
 }
 
 fn distance_of(x: Point, y: Point) -> f32 {
-    let a = x.to_vector() - y.to_vector();
-    f32::sqrt((a * a).sum())
+    let a = x - y;
+    f32::sqrt(a.x()*a.x() + a.y()*a.y())
 }
 
 #[derive(Clone, Copy)]
@@ -122,15 +155,17 @@ struct Rect {
     width: f32,
     height: f32,
     rotation_matrix: Matrix<2,2>,
+    color: Option<SolidSource>,
 }
 
 impl Rect {
-    fn new(origin: Point, width: f32, height: f32) -> Rect {
+    fn new(origin: Point, width: f32, height: f32, color: Option<SolidSource>) -> Rect {
         Rect {
             origin,
             width,
             height,
             rotation_matrix: Matrix::<2, 2>::eye(),
+            color,
         }
     }
 
@@ -154,34 +189,22 @@ impl Rect {
             .rotate(Rotation { rotation_matrix: self.rotation_matrix, origin: self.origin })
     }
 
-    fn draw(&self, dt: &mut DrawTarget, color: SolidSource) {
-        dt.fill(
-            &self.path(),
-            &Source::Solid(color),
-            &DrawOptions {
-                blend_mode: BlendMode::Src,
-                alpha: 1.,
-                antialias: AntialiasMode::Gray,
-            }
-        );
-    }
-
-    fn path(&self) -> raqote::Path {
+    fn path(&self, translation: Vector2D) -> raqote::Path {
         let mut pb = PathBuilder::new();
-        let (x, y) = real2pixel(self.lt()).into();
+        let (x, y) = real2pixel(self.lt().translate(translation)).into();
         pb.move_to(x, y);
-        let (x, y) = real2pixel(self.rt()).into();
+        let (x, y) = real2pixel(self.rt().translate(translation)).into();
         pb.line_to(x, y);
-        let (x, y) = real2pixel(self.rb()).into();
+        let (x, y) = real2pixel(self.rb().translate(translation)).into();
         pb.line_to(x, y);
-        let (x, y) = real2pixel(self.lb()).into();
+        let (x, y) = real2pixel(self.lb().translate(translation)).into();
         pb.line_to(x, y);
         pb.close();
         pb.finish()
     }
 
     fn rotate_self(&mut self, rotation_matrix: Matrix<2,2>) {
-        self.rotation_matrix = rotation_matrix.multiply_matrix(self.rotation_matrix);
+        self.rotation_matrix = rotation_matrix * self.rotation_matrix;
     }
 
     fn rotate(&mut self, rotation: Rotation) {
@@ -191,6 +214,24 @@ impl Rect {
 
     fn forward(&mut self, distance: f32, rotation_matrix: Matrix<2,2>) {
         self.origin = self.origin.forward(distance, rotation_matrix);
+    }
+}
+
+impl View for Rect {
+    fn draw(&self, dt: &mut DrawTarget, translation: Vector2D) {
+        dt.fill(
+            &self.path(translation),
+            &Source::Solid(self.color.unwrap()),
+            &DrawOptions {
+                blend_mode: BlendMode::Src,
+                alpha: 1.,
+                antialias: AntialiasMode::Gray,
+            }
+        );
+    }
+
+    fn relative_translation(&self) -> Vector2D {
+        (0., 0.).into()
     }
 }
 
@@ -214,25 +255,40 @@ impl Logo {
         }
         Logo {
             data,
-            outline: Rect::new(origin, width, height),
+            outline: Rect::new(origin, width, height, None),
         }
     }
 
-    fn draw(&self, dt: &mut DrawTarget) {
+    fn rotate(&mut self, rotation: Rotation) {
+        self.outline.rotate(rotation);
+    }
+
+    fn forward(&mut self, distance: f32, rotation_matrix: Matrix<2,2>) {
+        self.outline.forward(distance, rotation_matrix);
+    }
+}
+
+impl View for Logo {
+    fn relative_translation(&self) -> Vector2D {
+        (0., 0.).into()
+    }
+
+    fn draw(&self, dt: &mut DrawTarget, translation: Vector2D) {
         let image = raqote::Image {
             width: (self.outline.width*SCALE) as i32,
             height: (self.outline.height*SCALE) as i32,
             data: self.data.as_slice()
         };
         let rot_inv = self.outline.rotation_matrix.inverse().unwrap();
+        let origin = self.outline.origin.translate(translation);
         dt.fill(
-            &self.outline.path(), 
+            &self.outline.path(translation), 
             &Source::Image(
                 image,
                 ExtendMode::Pad,
                 FilterMode::Bilinear,
                 Transform::row_major(1./SCALE, 0., 0., -1./SCALE, 0., WINDOW_HEIGHT)
-                    .post_transform(&Transform::create_translation(-self.outline.origin.x, -self.outline.origin.y))
+                    .post_transform(&Transform::create_translation(-origin.x, -origin.y))
                     .post_transform(&Transform::row_major(
                         rot_inv.inner[0][0],
                         rot_inv.inner[1][0],
@@ -251,18 +307,6 @@ impl Logo {
             }
         );
     }
-
-    fn rotate_self(&mut self, rotation_matrix: Matrix<2,2>) {
-        self.outline.rotate_self(rotation_matrix);
-    }
-
-    fn rotate(&mut self, rotation: Rotation) {
-        self.outline.rotate(rotation);
-    }
-
-    fn forward(&mut self, distance: f32, rotation_matrix: Matrix<2,2>) {
-        self.outline.forward(distance, rotation_matrix);
-    }
 }
 
 struct Car {
@@ -279,15 +323,17 @@ struct Car {
 
 impl Car {
     fn new(body_origin: Point, angle: f32) -> Car {
-        let mut body = Rect::new(body_origin, CAR_WIDTH, CAR_HEIGHT);
+        let body_color = SolidSource::from_unpremultiplied_argb(0xff, 24, 174, 219);
+        let wheel_color = SolidSource::from_unpremultiplied_argb(0xff, 0, 0, 0);
+        let mut body = Rect::new(body_origin, CAR_WIDTH, CAR_HEIGHT, Some(body_color));
         let mut lt = Rect::new(point2(body.origin.x-TRACK_WIDTH/2., CAR_HEIGHT/2.+body.origin.y-FRONT_SUSPENSION),
-        WHEEL_WIDTH, WHEEL_HEIGHT);
+        WHEEL_WIDTH, WHEEL_HEIGHT, Some(wheel_color));
         let mut rt = Rect::new(point2(body.origin.x+TRACK_WIDTH/2., CAR_HEIGHT/2.+body.origin.y-FRONT_SUSPENSION),
-        WHEEL_WIDTH, WHEEL_HEIGHT);
+        WHEEL_WIDTH, WHEEL_HEIGHT, Some(wheel_color));
         let mut lb = Rect::new(point2(body.origin.x-TRACK_WIDTH/2., -CAR_HEIGHT/2.+body.origin.y+REAR_SUSPENSION),
-        WHEEL_WIDTH, WHEEL_HEIGHT);
+        WHEEL_WIDTH, WHEEL_HEIGHT, Some(wheel_color));
         let mut rb = Rect::new(point2(body.origin.x+TRACK_WIDTH/2., -CAR_HEIGHT/2.+body.origin.y+REAR_SUSPENSION),
-        WHEEL_WIDTH, WHEEL_HEIGHT);
+        WHEEL_WIDTH, WHEEL_HEIGHT, Some(wheel_color));
         let mut logo = Logo::new(
             std::path::Path::new("res/tesla.svg"),
             point2(body_origin.x, body_origin.y+CAR_HEIGHT/2.-0.2),
@@ -298,12 +344,12 @@ impl Car {
             point2(
                 body_origin.x-CAR_WIDTH/2.-MIRROR_HEIGHT/2.,
                 body_origin.y+CAR_HEIGHT/2.-MIRROR_ORIGIN_TO_FRONT,
-            ), MIRROR_WIDTH, MIRROR_HEIGHT);
+            ), MIRROR_WIDTH, MIRROR_HEIGHT, Some(body_color));
         let mut right_mirror = Rect::new(
             point2(
                 body_origin.x+CAR_WIDTH/2.+MIRROR_HEIGHT/2.,
                 body_origin.y+CAR_HEIGHT/2.-MIRROR_ORIGIN_TO_FRONT,
-            ), MIRROR_WIDTH, MIRROR_HEIGHT);
+            ), MIRROR_WIDTH, MIRROR_HEIGHT, Some(body_color));
         left_mirror.rotate_self(new_rotation_matrix(std::f32::consts::PI/2.));
         right_mirror.rotate_self(new_rotation_matrix(std::f32::consts::PI/2.));
         left_mirror.rotate(Rotation::new(std::f32::consts::PI/2.-MIRROR_ANGLE, left_mirror.rb()));
@@ -320,19 +366,6 @@ impl Car {
         Car {
             lt, rt, lb, rb, body, steer_angle: 0, logo, left_mirror, right_mirror
         }
-    }
-
-    fn draw(&self, dt: &mut DrawTarget) {
-        let body_color = SolidSource::from_unpremultiplied_argb(0xff, 24, 174, 219);
-        let wheel_color = SolidSource::from_unpremultiplied_argb(0xff, 0, 0, 0);
-        self.body.draw(dt, body_color);
-        self.lt.draw(dt, wheel_color);
-        self.rt.draw(dt, wheel_color);
-        self.lb.draw(dt, wheel_color);
-        self.rb.draw(dt, wheel_color);
-        self.logo.draw(dt);
-        self.left_mirror.draw(dt, body_color);
-        self.right_mirror.draw(dt, body_color);
     }
 
     fn angle_matrix(&self, r: f32) -> Matrix<2, 2> {
@@ -370,8 +403,8 @@ impl Car {
     fn steer(&mut self) {
         let o_new = self.angle2origin(self.steer_angle);
         let (lt, rt) = self.top2_angle_matrix(o_new);
-        self.lt.rotation_matrix = lt.multiply_matrix(self.body.rotation_matrix);
-        self.rt.rotation_matrix = rt.multiply_matrix(self.body.rotation_matrix);
+        self.lt.rotation_matrix = lt * self.body.rotation_matrix;
+        self.rt.rotation_matrix = rt * self.body.rotation_matrix;
     }
 
     fn forward(&mut self, distance: f32) {
@@ -458,9 +491,34 @@ impl Car {
     }
 }
 
-trait Map {
-    fn draw(&mut self, dt: &mut DrawTarget);
+impl View for Car {
+    fn relative_translation(&self) -> Vector2D {
+        (MENU_WIDTH, 0.).into()
+    }
+
+    fn draw(&self, dt: &mut DrawTarget, translation: Vector2D) {
+        let translation = translation + self.relative_translation();
+        self.body.draw(dt, translation);
+        self.lt.draw(dt, translation);
+        self.rt.draw(dt, translation);
+        self.lb.draw(dt, translation);
+        self.rb.draw(dt, translation);
+        self.logo.draw(dt, translation);
+        self.left_mirror.draw(dt, translation);
+        self.right_mirror.draw(dt, translation);
+    }
+}
+
+trait Map: View{
     fn car(&self) -> Car;
+}
+
+trait View {
+    // 返回该View相对父View的translation
+    fn relative_translation(&self) -> Vector2D;
+
+    // translation: 父View的translation
+    fn draw(&self, dt: &mut DrawTarget, translation: Vector2D);
 }
 
 
@@ -476,11 +534,11 @@ fn main() {
                                 }).unwrap();
     let size = window.get_size();
     let back_parking_button = Button::new(
-        pixel2real((100., 50.).into()).into(), 100./SCALE, 50./SCALE, 
-    &|| Box::new(BackParking::new()), "倒车入库");
+        pixel2real((75., 50.).into()).into(), 100./SCALE, 50./SCALE, 
+    &|| Box::new(BackParking::new()), "倒车入库", &font);
     let parallel_parking_button = Button::new(
-        pixel2real((100., 125.).into()).into(), 100./SCALE, 50./SCALE,
-        &|| Box::new(ParallelParking::new()), "侧方停车");
+        pixel2real((75., 125.).into()).into(), 100./SCALE, 50./SCALE,
+        &|| Box::new(ParallelParking::new()), "侧方停车", &font);
     let buttons = vec![back_parking_button, parallel_parking_button];
     while window.is_open() {
         if window.get_mouse_down(MouseButton::Left) {
@@ -494,9 +552,9 @@ fn main() {
                 }
             }
         }
-        map.draw(&mut dt);
+        map.draw(&mut dt, (0., 0.).into());
         for button in buttons.iter() {
-            button.draw(&mut dt, &font);
+            button.draw(&mut dt, (0., 0.).into());
         }
         if window.is_key_pressed(Key::Up, KeyRepeat::Yes) {
             car.forward(0.3);
@@ -507,7 +565,7 @@ fn main() {
         } else if window.is_key_pressed(Key::Right, KeyRepeat::Yes) {
             car.right_steer();
         }
-        car.draw(&mut dt);
+        car.draw(&mut dt, (0., 0.).into());
         window.update_with_buffer(dt.get_data(), size.0, size.1).unwrap();
     }
 }
