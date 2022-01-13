@@ -2,6 +2,7 @@ use back_parking::BackParking;
 use linear_algebra::{Matrix, Vector2D};
 use minifb::{Window, WindowOptions, Key, KeyRepeat, MouseButton};
 use parallel_parking::ParallelParking;
+use right_angle_turn::RightAngleTurn;
 use raqote::{DrawTarget, SolidSource, Source, DrawOptions, PathBuilder, ExtendMode, FilterMode, Transform, BlendMode, AntialiasMode};
 use std::ops;
 
@@ -10,7 +11,7 @@ use button::Button;
 mod linear_algebra;
 mod parallel_parking;
 mod back_parking;
-// mod right_angle_turn;
+mod right_angle_turn;
 mod button;
 
 const WINDOW_WIDTH: f32 = WINDOW_HEIGHT+MENU_WIDTH;
@@ -539,7 +540,10 @@ fn main() {
     let parallel_parking_button = Button::new(
         pixel2real((75., 125.).into()).into(), 100./SCALE, 50./SCALE,
         &|| Box::new(ParallelParking::new()), "侧方停车", &font);
-    let buttons = vec![back_parking_button, parallel_parking_button];
+    let right_angle_button = Button::new(
+        pixel2real((75., 200.).into()).into(), 100./SCALE, 50./SCALE, 
+        &|| Box::new(RightAngleTurn::new()), "直角转弯", &font);
+    let buttons = vec![back_parking_button, parallel_parking_button, right_angle_button];
     while window.is_open() {
         if window.get_mouse_down(MouseButton::Left) {
             let pixel_point: Point = window.get_mouse_pos(minifb::MouseMode::Clamp).unwrap().into();
