@@ -4,7 +4,7 @@ use minifb::{Window, WindowOptions, Key, KeyRepeat, MouseButton};
 use parallel_parking::ParallelParking;
 use right_angle_turn::RightAngleTurn;
 use raqote::{DrawTarget, SolidSource, Source, DrawOptions, PathBuilder, ExtendMode, FilterMode, Transform, BlendMode, AntialiasMode};
-use std::{ops, time::SystemTime};
+use std::{ops, time::{SystemTime, Duration}};
 
 use button::Button;
 
@@ -545,12 +545,26 @@ fn main() {
         pixel2real((75., 200.).into()).into(), 100./SCALE, 50./SCALE, 
         &|| Box::new(RightAngleTurn::new()), "直角转弯", &font);
     let buttons = vec![back_parking_button, parallel_parking_button, right_angle_button];
+
+    let mut fps_monitor_last_time = SystemTime::now();
+    let mut frames = 0;
+    let mut fps_monitor = || {
+        let elapsed = fps_monitor_last_time.elapsed().unwrap().as_secs_f32();
+        frames += 1;
+        if elapsed >= 1. {
+            println!("fps = {}", frames as f32/elapsed);
+            fps_monitor_last_time = SystemTime::now();
+            frames = 0;
+        }
+    };
+
     let mut last_time = SystemTime::now();
     let mut elapsed_time = || {
         let res = last_time.elapsed().unwrap();
         last_time = SystemTime::now();
         res.as_secs_f32()
     };
+    window.limit_update_rate(None);
     while window.is_open() {
         if window.get_mouse_down(MouseButton::Left) {
             let pixel_point: Point = window.get_mouse_pos(minifb::MouseMode::Clamp).unwrap().into();
@@ -579,5 +593,7 @@ fn main() {
         }
         car.draw(&mut dt, (0., 0.).into());
         window.update_with_buffer(dt.get_data(), size.0, size.1).unwrap();
+
+        fps_monitor();
     }
 }
