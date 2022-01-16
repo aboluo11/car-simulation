@@ -15,7 +15,7 @@ impl<'a> Button<'a> {
         call_back: &'a dyn Fn() -> Box<dyn Map>, text: &'static str, font: &'a Font) -> Button<'a> {
         Button {
             outline: Rect::new(origin, width, height, 
-                Some(SolidSource::from_unpremultiplied_argb(0xff, 104, 124, 166))),
+                Some(SolidSource::from_unpremultiplied_argb(0xff, 102, 252, 3))),
             call_back,
             text,
             font,

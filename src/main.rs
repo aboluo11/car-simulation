@@ -4,7 +4,7 @@ use minifb::{Window, WindowOptions, Key, KeyRepeat, MouseButton};
 use parallel_parking::ParallelParking;
 use right_angle_turn::RightAngleTurn;
 use raqote::{DrawTarget, SolidSource, Source, DrawOptions, PathBuilder, ExtendMode, FilterMode, Transform, BlendMode, AntialiasMode};
-use std::ops;
+use std::{ops, time::SystemTime};
 
 use button::Button;
 
@@ -32,6 +32,7 @@ const MIRROR_HEIGHT: f32 = 0.35;
 const MIRROR_ANGLE: f32 = 70./180.*std::f32::consts::PI;
 const MIRROR_ORIGIN_TO_FRONT: f32 = 1.55-MIRROR_WIDTH/2.;
 const MENU_WIDTH: f32 = 150./SCALE;
+const SPEED: f32 = 4.0;
 
 fn real2pixel(p: Point) -> Point {
     point2(p.x * SCALE, (WINDOW_HEIGHT - p.y) * SCALE)
@@ -527,7 +528,7 @@ fn main() {
     let font = font_kit::font::Font::from_path("C:\\Windows\\Fonts\\Deng.ttf", 0)
         .unwrap();
     let mut dt = DrawTarget::new((WINDOW_WIDTH*SCALE) as i32, (WINDOW_HEIGHT*SCALE) as i32);
-    let mut map: Box<dyn Map> = Box::new(ParallelParking::new());
+    let mut map: Box<dyn Map> = Box::new(BackParking::new());
     let mut car = map.car();
     let mut window = Window::new("Car-Simulation", 
     (WINDOW_WIDTH*SCALE) as usize, (WINDOW_HEIGHT*SCALE) as usize, WindowOptions {
@@ -544,6 +545,12 @@ fn main() {
         pixel2real((75., 200.).into()).into(), 100./SCALE, 50./SCALE, 
         &|| Box::new(RightAngleTurn::new()), "直角转弯", &font);
     let buttons = vec![back_parking_button, parallel_parking_button, right_angle_button];
+    let mut last_time = SystemTime::now();
+    let mut elapsed_time = || {
+        let res = last_time.elapsed().unwrap();
+        last_time = SystemTime::now();
+        res.as_secs_f32()
+    };
     while window.is_open() {
         if window.get_mouse_down(MouseButton::Left) {
             let pixel_point: Point = window.get_mouse_pos(minifb::MouseMode::Clamp).unwrap().into();
@@ -560,10 +567,11 @@ fn main() {
         for button in buttons.iter() {
             button.draw(&mut dt, (0., 0.).into());
         }
-        if window.is_key_pressed(Key::Up, KeyRepeat::Yes) {
-            car.forward(0.3);
-        } else if window.is_key_pressed(Key::Down, KeyRepeat::Yes) {
-            car.forward(-0.3);
+        let distance = elapsed_time() * SPEED;
+        if window.is_key_down(Key::Up) {
+            car.forward(distance);
+        } else if window.is_key_down(Key::Down) {
+            car.forward(-distance);
         } else if window.is_key_pressed(Key::Left, KeyRepeat::Yes) {
             car.left_steer();
         } else if window.is_key_pressed(Key::Right, KeyRepeat::Yes) {
