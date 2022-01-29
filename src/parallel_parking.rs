@@ -18,11 +18,12 @@ impl ParallelParking {
     pub fn new() -> Self {
         let color = SolidSource::from_unpremultiplied_argb(0xff, 0xff, 0xff, 0xff);
         let road = Rect::new(point2(MAP_WIDTH/2., MAP_HEIGHT/2.), ROAD_WIDTH, MAP_HEIGHT, Some(color));
+        let parking_space = Rect::new(
+            point2(road.origin.x+ROAD_WIDTH/2.+PARKING_WIDTH/2., road.origin.y),
+            PARKING_WIDTH, PARKING_LENGTH, Some(color));
         ParallelParking {
             road,
-            parking_space: Rect::new(
-                point2(road.origin.x+ROAD_WIDTH/2.+PARKING_WIDTH/2., road.origin.y),
-                PARKING_WIDTH, PARKING_LENGTH, Some(color)),
+            parking_space,
         }
     }
 }

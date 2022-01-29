@@ -4,7 +4,7 @@ use raqote::{SolidSource, DrawTarget};
 
 const MAP_WIDTH: f32 = WINDOW_WIDTH - MENU_WIDTH;
 const MAP_HEIGHT: f32 = WINDOW_HEIGHT;
-const ROAD_WIDTH: f32 = CAR_HEIGHT * 1.5;
+const ROAD_WIDTH: f32 = 4.0;
 
 pub struct RightAngleTurn {
     road_horizontal: Rect,
